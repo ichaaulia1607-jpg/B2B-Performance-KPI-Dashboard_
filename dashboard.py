@@ -218,104 +218,102 @@ if data_loaded:
         else:
             st.warning("Data waktu tidak mencukupi untuk memetakan tren bulanan.")
 
-    # ------------------------------------------------------------------------------
-# TAB 3: PERTANYAAN 3 (Matriks Kuadran Prioritas Wilayah STO)
+# ------------------------------------------------------------------------------
+# TAB 3: PERTANYAAN 3 (Matriks Kuadran Prioritas Wilayah STO - CREATIVE VERSION)
 # ------------------------------------------------------------------------------
 with tab3:
-    st.subheader("📍 Matriks Kuadran Prioritas Wilayah STO")
+    st.subheader("📍 Peta Urgensi & Evaluasi Performansi Wilayah STO")
     
     if not df_filtered.empty and 'STO' in df_filtered.columns:
         import matplotlib.pyplot as plt
         import seaborn as sns
+        import numpy as np
         
-        # 1. Feature Engineering: Hitung durasi TTR nyata dalam satuan Jam
+        # 1. Feature Engineering & Perhitungan Durasi Jam
         df_filtered['Waktu_Open'] = pd.to_datetime(df_filtered['Waktu_Open'])
         df_filtered['Waktu_Closed'] = pd.to_datetime(df_filtered['Waktu_Closed'])
         df_filtered['Durasi_TTR_Jam'] = (df_filtered['Waktu_Closed'] - df_filtered['Waktu_Open']) / pd.Timedelta(hours=1)
         
-        # Aggregate data per STO
         sto_analysis = df_filtered.groupby('STO').agg(
             Jumlah_Gangguan=('No_Tiket', 'count'),
             Rata_TTR=('Durasi_TTR_Jam', 'mean')
         ).reset_index()
         
-        # Menentukan garis tengah kuadran berdasarkan rata-rata
         mid_x = sto_analysis['Jumlah_Gangguan'].mean()
         mid_y = sto_analysis['Rata_TTR'].mean()
         
         col_g3, col_t3 = st.columns([2, 1])
         
         with col_g3:
-            # 2. Setup Tema Visual Premium
-            sns.set_theme(style="whitegrid")
-            fig3, ax3 = plt.subplots(figsize=(10, 6.5))
+            # Setup Kanvas Visual
+            sns.set_theme(style="white")
+            fig3, ax3 = plt.subplots(figsize=(10, 7))
             
-            # Mapping warna otomatis berdasarkan posisi kuadran
+            # Mengatur rentang sumbu agar pas dengan data riil Excel
+            xmin, xmax = 1, sto_analysis['Jumlah_Gangguan'].max() + 1
+            ymin, ymax = 3, sto_analysis['Rata_TTR'].max() + 1
+            ax3.set_xlim(xmin, xmax)
+            ax3.set_ylim(ymin, ymax)
+            
+            # Mewarnai area background kuadran agar sangat mudah dipahami
+            ax3.fill_between([mid_x, xmax], mid_y, ymax, color='#FFEAEA', alpha=0.6, zorder=0) # Kuadran I - Merah
+            ax3.fill_between([xmin, mid_x], mid_y, ymax, color='#FFF2EA', alpha=0.6, zorder=0) # Kuadran II - Jingga
+            ax3.fill_between([xmin, mid_x], ymin, mid_y, color='#E9F7F5', alpha=0.6, zorder=0) # Kuadran III - Hijau
+            ax3.fill_between([mid_x, xmax], ymin, mid_y, color='#EAF2FF', alpha=0.6, zorder=0) # Kuadran IV - Biru
+            
+            # Garis putus-putus pembatas rata-rata penanganan
+            ax3.axvline(mid_x, color='#7F8C8D', linestyle=':', linewidth=2, alpha=0.8, zorder=1)
+            ax3.axhline(mid_y, color='#7F8C8D', linestyle=':', linewidth=2, alpha=0.8, zorder=1)
+            
+            # Mengelompokkan warna titik data berdasarkan kuadrannya
             colors = []
             for idx, row in sto_analysis.iterrows():
-                if row['Jumlah_Gangguan'] >= mid_x and row['Rata_TTR'] >= mid_y:
-                    colors.append('#E63946') # Red (Kuadran I - Kritis)
-                elif row['Jumlah_Gangguan'] < mid_x and row['Rata_TTR'] >= mid_y:
-                    colors.append('#F4A261') # Orange (Kuadran II - Slow but Low)
-                elif row['Jumlah_Gangguan'] >= mid_x and row['Rata_TTR'] < mid_y:
-                    colors.append('#457B9D') # Blue (Kuadran IV - Fast & High)
-                else:
-                    colors.append('#2A9D8F') # Green (Kuadran III - Aman)
-                    
-            # 3. Plotting Titik Data STO
-            ax3.scatter(
-                sto_analysis['Jumlah_Gangguan'], sto_analysis['Rata_TTR'], 
-                s=350, c=colors, edgecolor='white', linewidth=2, alpha=0.9, zorder=3
-            )
+                if row['Jumlah_Gangguan'] >= mid_x and row['Rata_TTR'] >= mid_y: colors.append('#D62828')
+                elif row['Jumlah_Gangguan'] < mid_x and row['Rata_TTR'] >= mid_y: colors.append('#E65F2B')
+                elif row['Jumlah_Gangguan'] >= mid_x and row['Rata_TTR'] < mid_y: colors.append('#1D3557')
+                else: colors.append('#2A9D8F')
             
-            # Mengatur batas dinamis agar teks info kuadran tidak terpotong
-            xlim = (sto_analysis['Jumlah_Gangguan'].min() - 1, sto_analysis['Jumlah_Gangguan'].max() + 1)
-            ylim = (sto_analysis['Rata_TTR'].min() - 1, sto_analysis['Rata_TTR'].max() + 1)
-            ax3.set_xlim(xlim)
-            ax3.set_ylim(ylim)
+            # Gambar titik STO
+            ax3.scatter(sto_analysis['Jumlah_Gangguan'], sto_analysis['Rata_TTR'], s=400, c=colors, edgecolor='white', linewidth=2.5, zorder=3)
             
-            # Membuat garis putus-putus pembagi kuadran
-            ax3.axvline(mid_x, color='#A8DADC', linestyle='--', linewidth=1.5, zorder=1)
-            ax3.axhline(mid_y, color='#A8DADC', linestyle='--', linewidth=1.5, zorder=1)
-            
-            # 4. Labeling Setiap Titik STO dengan Box Putih yang Rapi
+            # Beri label penjelasan detail di atas setiap titik STO
             for i in range(sto_analysis.shape[0]):
                 ax3.annotate(
-                    sto_analysis.STO[i],
+                    f"STO {sto_analysis.STO[i]}\n({sto_analysis.Jumlah_Gangguan[i]} Tiket | {sto_analysis.Rata_TTR[i]:.1f} Jam)",
                     (sto_analysis.Jumlah_Gangguan[i], sto_analysis.Rata_TTR[i]),
-                    textcoords="offset points", xytext=(0, 15), ha='center', fontsize=11, weight='bold',
-                    bbox=dict(boxstyle="round,pad=0.3", fc="white", edgecolor='#E1E1E1', alpha=0.8, lw=1)
+                    textcoords="offset points", xytext=(0, 18), ha='center', fontsize=10, weight='bold',
+                    bbox=dict(boxstyle="round,pad=0.4", fc="white", edgecolor='#BDC3C7', alpha=0.9, lw=1), zorder=4
                 )
                 
-            # 5. Dekorasi Banner Info Text di Setiap Sudut Kuadran
-            ax3.text(xlim[1] - 0.2, ylim[1] - 0.4, "KUADRAN I: PRIORITAS UTAMA\n(Gangguan Banyak & Lambat)", color='#D62828', fontsize=9, weight='bold', ha='right', bbox=dict(boxstyle="square,pad=0.4", fc="#FFEAEA", ec="none", alpha=0.7))
-            ax3.text(xlim[0] + 0.2, ylim[1] - 0.4, "KUADRAN II: SLOW BUT LOW\n(Gangguan Sedikit tapi Lambat)", color='#E65F2B', fontsize=9, weight='bold', ha='left', bbox=dict(boxstyle="square,pad=0.4", fc="#FFF2EA", ec="none", alpha=0.7))
-            ax3.text(xlim[1] - 0.2, ylim[0] + 0.3, "KUADRAN IV: FAST & HIGH\n(Gangguan Banyak tapi Cepat)", color='#1D3557', fontsize=9, weight='bold', ha='right', bbox=dict(boxstyle="square,pad=0.4", fc="#EAF2FF", ec="none", alpha=0.7))
-            ax3.text(xlim[0] + 0.2, ylim[0] + 0.3, "KUADRAN III: AMAN\n(Gangguan Sedikit & Cepat)", color='#2A9D8F', fontsize=9, weight='bold', ha='left', bbox=dict(boxstyle="square,pad=0.4", fc="#E9F7F5", ec="none", alpha=0.7))
+            # Mengubah angka sumbu biasa menjadi tulisan ber-satuan eksplisit (Masukan dari Icha)
+            ax3.set_xticks(range(int(xmin), int(xmax) + 1))
+            ax3.set_xticklabels([f"{int(x)} Tiket" for x in range(int(xmin), int(xmax) + 1)], fontsize=10, weight='semibold', color='#555555')
             
-            # Polishing Judul & Label Sumbu
-            ax3.set_title('MATRIKS PRIORITAS PERFORMANSI WILAYAH STO\nTelkom Akses Pekanbaru', fontsize=13, pad=20, weight='bold', color='#1D3557')
-            ax3.set_xlabel('Volume Gangguan (Jumlah Tiket Masuk)', fontsize=11, labelpad=10, weight='semibold')
-            ax3.set_ylabel('Rata-rata Waktu Perbaikan / TTR (Jam)', fontsize=11, labelpad=10, weight='semibold')
-            ax3.grid(True, linestyle=':', alpha=0.5, color='#CCCCCC')
+            y_ticks = np.arange(int(ymin), int(ymax) + 1, 1)
+            ax3.set_yticks(y_ticks)
+            ax3.set_yticklabels([f"{int(y)} Jam" for y in y_ticks], fontsize=10, weight='semibold', color='#555555')
+            
+            # Tulisan keterangan Judul Kuadran di tiap pojokan
+            ax3.text(xmax - 0.2, ymax - 0.4, "KUADRAN I\nPRIORITAS UTAMA\n(Beban Tinggi & Lambat)", color='#D62828', fontsize=9, weight='bold', ha='right', va='top')
+            ax3.text(xmin + 0.2, ymax - 0.4, "KUADRAN II\nSLOW BUT LOW\n(Isu SDM / Teknis Regional)", color='#E65F2B', fontsize=9, weight='bold', ha='left', va='top')
+            ax3.text(xmin + 0.2, ymin + 0.3, "KUADRAN III\nZONA AMAN\n(Responsif & Efisien)", color='#2A9D8F', fontsize=9, weight='bold', ha='left', va='bottom')
+            ax3.text(xmax - 0.2, ymin + 0.3, "KUADRAN IV\nFAST & HIGH\n(Volume Tinggi tapi Cepat)", color='#1D3557', fontsize=9, weight='bold', ha='right', va='bottom')
+            
+            ax3.set_title('MATRIKS PRIORITAS PERFORMANSI WILAYAH STO\nTelkom Akses Pekanbaru', fontsize=13, pad=25, weight='bold', color='#1D3557')
             sns.despine(left=True, bottom=True)
+            ax3.grid(True, linestyle=':', alpha=0.4, color='#95A5A6')
             
             st.pyplot(fig3)
             
         with col_t3:
             st.warning("⚠️ **Analisis Strategis & Urgensi STO:**")
-            
-            # Menemukan STO yang masuk Kuadran Kritis (I)
             sto_kritis = sto_analysis[(sto_analysis['Jumlah_Gangguan'] >= mid_x) & (sto_analysis['Rata_TTR'] >= mid_y)]['STO'].tolist()
             
             if sto_kritis:
                 kritis_str = ", ".join(sto_kritis)
-                st.write(f"Wilayah STO **{kritis_str}** teridentifikasi masuk ke **KUADRAN I (Prioritas Utama)** karena memiliki jumlah gangguan di atas rata-rata sekaligus durasi perbaikan yang lambat.")
-                st.markdown("💡 **Rekomendasi Operasional:**")
-                st.write("- Lakukan audit logistik/material di wilayah tersebut.")
-                st.write("- Tambah alokasi teknisi standby khusus penanganan B2B.")
+                st.write(f"Wilayah STO **{kritis_str}** teridentifikasi masuk ke **KUADRAN I (Prioritas Utama)**.")
             else:
-                st.write("Kabar baik! Tidak ada wilayah STO yang masuk ke dalam Kuadran I (Kritis) untuk kombinasi filter saat ini.")
+                st.write("Saat ini tidak ada wilayah STO yang masuk ke Kuadran Kritis (Beban Tinggi & Lambat).")
                 
             st.write("---")
             st.markdown("**Data Resume Per Wilayah STO:**")
