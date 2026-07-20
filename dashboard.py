@@ -219,50 +219,87 @@ if data_loaded:
             st.warning("Data waktu tidak mencukupi untuk memetakan tren bulanan.")
 
     # ------------------------------------------------------------------------------
-    # TAB 3: PERTANYAAN 3 (Prioritas Wilayah STO Berdasarkan Volume Kasus)
-    # ------------------------------------------------------------------------------
-    with tab3:
-        st.subheader("📌 Urgensi Penanganan Berdasarkan Lokasi Sentral (STO)")
+# TAB 3: PERTANYAAN 3 (Matriks Kuadran Prioritas STO)
+# ------------------------------------------------------------------------------
+with tab3:
+    st.subheader("📍 Matriks Kuadran Prioritas Wilayah STO")
+    
+    if not df_filtered.empty:
+        # Hitung durasi TTR nyata berdasarkan data Excel asli
+        df_filtered['Durasi_TTR_Jam'] = (df_filtered['Waktu_Closed'] - df_filtered['Waktu_Open']) / pd.Timedelta(hours=1)
+        
+        sto_analysis = df_filtered.groupby('STO').agg(
+            Jumlah_Gangguan=('No_Tiket', 'count'),
+            Rata_TTR=('Durasi_TTR_Jam', 'mean')
+        ).reset_index()
+        
+        mid_x = sto_analysis['Jumlah_Gangguan'].mean()
+        mid_y = sto_analysis['Rata_TTR'].mean()
+        
+        fig3, ax3 = plt.subplots(figsize=(10, 6))
+        sns.scatterplot(x='Jumlah_Gangguan', y='Rata_TTR', data=sto_analysis, s=200, color='#E63946', edgecolor='black', ax=ax3)
+        
+        for i in range(sto_analysis.shape[0]):
+            ax3.text(sto_analysis.Jumlah_Gangguan[i] + 0.1, sto_analysis.Rata_TTR[i], sto_analysis.STO[i], horizontalalignment='left', size='medium', color='black', weight='semibold')
+            
+        ax3.axvline(mid_x, color='blue', linestyle='--', alpha=0.6)
+        ax3.axhline(mid_y, color='blue', linestyle='--', alpha=0.6)
+        
+        ax3.text(mid_x * 1.05, ax3.get_ylim()[1] * 0.9, "⚠️ PRIORITAS UTAMA\n(Gangguan Banyak & Lambat)", color='red', fontsize=10, weight='bold')
+        ax3.text(ax3.get_xlim()[0] * 1.05, ax3.get_ylim()[1] * 0.9, "SLOW BUT LOW\n(Gangguan Sedikit tapi Lambat)", color='orange', fontsize=10)
+        ax3.text(mid_x * 1.05, ax3.get_ylim()[0] * 1.1, "FAST & HIGH\n(Gangguan Banyak tapi Cepat)", color='orange', fontsize=10)
+        ax3.text(ax3.get_xlim()[0] * 1.05, ax3.get_ylim()[0] * 1.1, "✅ AMAN\n(Gangguan Sedikit & Cepat)", color='green', fontsize=10, weight='bold')
+        
+        ax3.set_title('Matriks Prioritas Performansi Wilayah STO', fontsize=14, fontweight='bold')
+        ax3.set_xlabel('Volume Gangguan (Tiket)')
+        ax3.set_ylabel('Rata-rata Waktu Perbaikan (Jam)')
+        ax3.grid(True, linestyle=':', alpha=0.6)
+        
+        st.pyplot(fig3)
+    else:
+        st.warning("Data kosong untuk filter ini.")
 
-        df_q3 = df_filtered.copy()
-
-        if not df_q3.empty and 'STO' in df_q3.columns:
-            # Hitung persebaran gangguan per STO
-            sto_counts = df_q3['STO'].value_counts().reset_index()
-            sto_counts.columns = ['STO', 'Jumlah_Gangguan']
-            sto_counts = sto_counts.sort_values('Jumlah_Gangguan', ascending=False)
-
-            col_g3, col_t3 = st.columns([2, 1])
-
-            with col_g3:
-                fig3, ax3 = plt.subplots(figsize=(10, 5))
-                colors_q3 = sns.color_palette("Reds_r", len(sto_counts))
-
-                sns.barplot(
-                    x='Jumlah_Gangguan', y='STO', data=sto_counts,
-                    palette=colors_q3, ax=ax3, hue='STO', legend=False
-                )
-
-                mean_gangguan = sto_counts['Jumlah_Gangguan'].mean()
-                if mean_gangguan > 0:
-                    ax3.axvline(mean_gangguan, color='blue', linestyle='--', label=f'Rata-rata Beban: {mean_gangguan:.1f} Kasus')
-
-                ax3.set_title('Volume Tiket Masuk per Wilayah STO', fontsize=14, fontweight='bold')
-                ax3.set_xlabel('Jumlah Gangguan (Tiket)')
-                ax3.set_ylabel('Wilayah STO')
-                ax3.legend(loc='lower right')
-                ax3.grid(axis='x', linestyle='--', alpha=0.5)
-                ax3.xaxis.set_major_locator(MaxNLocator(integer=True))
-                st.pyplot(fig3)
-
-            with col_t3:
-                st.warning("⚠️ **Tingkat Urgensi Distribusi Wilayah:**")
-                sto_tertinggi = sto_counts.iloc[0]['STO']
-                kasus_tertinggi = sto_counts.iloc[0]['Jumlah_Gangguan']
-                st.write(f"Wilayah sentral **{sto_tertinggi}** teridentifikasi memiliki beban komplain tertinggi yaitu sebanyak **{kasus_tertinggi} kasus**. Penambahan alokasi *standby teknisi* di area ini sangat diperlukan.")
-                st.dataframe(sto_counts)
-        else:
-            st.warning("Data atau kolom 'STO' tidak ditemukan.")
+# ------------------------------------------------------------------------------
+# TAB 4: ADVANCED OPERATIONS & PRODUKTIVITAS TEKNISI
+# ------------------------------------------------------------------------------
+with tab4:
+    st.subheader("👥 Analisis Produktivitas & Beban Kerja Teknisi Lapangan")
+    
+    if not df_filtered.empty:
+        # Menghitung performansi berdasarkan kolom asli 'Nama_Teknisi'
+        df_filtered['Durasi_TTR_Jam'] = (df_filtered['Waktu_Closed'] - df_filtered['Waktu_Open']) / pd.Timedelta(hours=1)
+        
+        # Konversi Status_TTR ke numerik untuk hitung persentase (Tercapai = 1, Tidak = 0)
+        df_filtered['Status_KPI_Num'] = (df_filtered['Status_TTR'] == 'Tercapai').astype(int)
+        
+        summary_teknisi = df_filtered.groupby('Nama_Teknisi').agg(
+            Total_Tiket=('No_Tiket', 'count'),
+            Rata_Rata_TTR=('Durasi_TTR_Jam', 'mean'),
+            Rasio_Sukses_KPI=('Status_KPI_Num', 'mean')
+        ).reset_index()
+        
+        summary_teknisi['Rasio_Sukses_KPI'] = (summary_teknisi['Rasio_Sukses_KPI'] * 100).round(2)
+        summary_teknisi = summary_teknisi.sort_values('Total_Tiket', ascending=False)
+        
+        col_g4, col_t4 = st.columns([2, 1])
+        
+        with col_g4:
+            fig4, ax4 = plt.subplots(figsize=(10, 6))
+            colors_q4 = sns.color_palette("Blues_r", len(summary_teknisi))
+            sns.barplot(x='Total_Tiket', y='Nama_Teknisi', data=summary_teknisi, palette=colors_q4, ax=ax4, hue='Nama_Teknisi', legend=False)
+            
+            rata_beban = summary_teknisi['Total_Tiket'].mean()
+            ax4.axvline(rata_beban, color='red', linestyle='--', label=f'Rata-rata Beban: {rata_beban:.1f} Tiket')
+            ax4.set_title('Perbandingan Beban Kasus Per Nama Teknisi', fontsize=14, fontweight='bold')
+            ax4.set_xlabel('Jumlah Tiket Selesai')
+            ax4.set_ylabel('Nama Teknisi')
+            ax4.legend(loc='lower right')
+            st.pyplot(fig4)
+            
+        with col_t4:
+            st.info("📊 **Evaluasi Kerja Lapangan:**")
+            st.write(f"Teknisi teraktif saat ini adalah **{summary_teknisi.iloc[0]['Nama_Teknisi']}** dengan kontribusi **{summary_teknisi.iloc[0]['Total_Tiket']} kasus**.")
+            st.dataframe(summary_teknisi.style.format({'Rata_Rata_TTR': '{:.2f} Jam', 'Rasio_Sukses_KPI': '{:.2f}%'}))
 
     # ------------------------------------------------------------------------------
     # TAB 4: ADVANCED AI INSIGHTS & PRODUKTIVITAS TEKNISI (Pertanyaan 4 + Integrasi Data)
