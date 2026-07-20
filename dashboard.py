@@ -219,51 +219,112 @@ if data_loaded:
             st.warning("Data waktu tidak mencukupi untuk memetakan tren bulanan.")
 
     # ------------------------------------------------------------------------------
-    # TAB 3: PERTANYAAN 3 (Prioritas Wilayah STO Berdasarkan Volume Kasus)
-    # ------------------------------------------------------------------------------
-    with tab3:
-        st.subheader("📌 Urgensi Penanganan Berdasarkan Lokasi Sentral (STO)")
-
-        df_q3 = df_filtered.copy()
-
-        if not df_q3.empty and 'STO' in df_q3.columns:
-            # Hitung persebaran gangguan per STO
-            sto_counts = df_q3['STO'].value_counts().reset_index()
-            sto_counts.columns = ['STO', 'Jumlah_Gangguan']
-            sto_counts = sto_counts.sort_values('Jumlah_Gangguan', ascending=False)
-
-            col_g3, col_t3 = st.columns([2, 1])
-
-            with col_g3:
-                fig3, ax3 = plt.subplots(figsize=(10, 5))
-                colors_q3 = sns.color_palette("Reds_r", len(sto_counts))
-
-                sns.barplot(
-                    x='Jumlah_Gangguan', y='STO', data=sto_counts,
-                    palette=colors_q3, ax=ax3, hue='STO', legend=False
+# TAB 3: PERTANYAAN 3 (Matriks Kuadran Prioritas Wilayah STO)
+# ------------------------------------------------------------------------------
+with tab3:
+    st.subheader("📍 Matriks Kuadran Prioritas Wilayah STO")
+    
+    if not df_filtered.empty and 'STO' in df_filtered.columns:
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        
+        # 1. Feature Engineering: Hitung durasi TTR nyata dalam satuan Jam
+        df_filtered['Waktu_Open'] = pd.to_datetime(df_filtered['Waktu_Open'])
+        df_filtered['Waktu_Closed'] = pd.to_datetime(df_filtered['Waktu_Closed'])
+        df_filtered['Durasi_TTR_Jam'] = (df_filtered['Waktu_Closed'] - df_filtered['Waktu_Open']) / pd.Timedelta(hours=1)
+        
+        # Aggregate data per STO
+        sto_analysis = df_filtered.groupby('STO').agg(
+            Jumlah_Gangguan=('No_Tiket', 'count'),
+            Rata_TTR=('Durasi_TTR_Jam', 'mean')
+        ).reset_index()
+        
+        # Menentukan garis tengah kuadran berdasarkan rata-rata
+        mid_x = sto_analysis['Jumlah_Gangguan'].mean()
+        mid_y = sto_analysis['Rata_TTR'].mean()
+        
+        col_g3, col_t3 = st.columns([2, 1])
+        
+        with col_g3:
+            # 2. Setup Tema Visual Premium
+            sns.set_theme(style="whitegrid")
+            fig3, ax3 = plt.subplots(figsize=(10, 6.5))
+            
+            # Mapping warna otomatis berdasarkan posisi kuadran
+            colors = []
+            for idx, row in sto_analysis.iterrows():
+                if row['Jumlah_Gangguan'] >= mid_x and row['Rata_TTR'] >= mid_y:
+                    colors.append('#E63946') # Red (Kuadran I - Kritis)
+                elif row['Jumlah_Gangguan'] < mid_x and row['Rata_TTR'] >= mid_y:
+                    colors.append('#F4A261') # Orange (Kuadran II - Slow but Low)
+                elif row['Jumlah_Gangguan'] >= mid_x and row['Rata_TTR'] < mid_y:
+                    colors.append('#457B9D') # Blue (Kuadran IV - Fast & High)
+                else:
+                    colors.append('#2A9D8F') # Green (Kuadran III - Aman)
+                    
+            # 3. Plotting Titik Data STO
+            ax3.scatter(
+                sto_analysis['Jumlah_Gangguan'], sto_analysis['Rata_TTR'], 
+                s=350, c=colors, edgecolor='white', linewidth=2, alpha=0.9, zorder=3
+            )
+            
+            # Mengatur batas dinamis agar teks info kuadran tidak terpotong
+            xlim = (sto_analysis['Jumlah_Gangguan'].min() - 1, sto_analysis['Jumlah_Gangguan'].max() + 1)
+            ylim = (sto_analysis['Rata_TTR'].min() - 1, sto_analysis['Rata_TTR'].max() + 1)
+            ax3.set_xlim(xlim)
+            ax3.set_ylim(ylim)
+            
+            # Membuat garis putus-putus pembagi kuadran
+            ax3.axvline(mid_x, color='#A8DADC', linestyle='--', linewidth=1.5, zorder=1)
+            ax3.axhline(mid_y, color='#A8DADC', linestyle='--', linewidth=1.5, zorder=1)
+            
+            # 4. Labeling Setiap Titik STO dengan Box Putih yang Rapi
+            for i in range(sto_analysis.shape[0]):
+                ax3.annotate(
+                    sto_analysis.STO[i],
+                    (sto_analysis.Jumlah_Gangguan[i], sto_analysis.Rata_TTR[i]),
+                    textcoords="offset points", xytext=(0, 15), ha='center', fontsize=11, weight='bold',
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", edgecolor='#E1E1E1', alpha=0.8, lw=1)
                 )
-
-                mean_gangguan = sto_counts['Jumlah_Gangguan'].mean()
-                if mean_gangguan > 0:
-                    ax3.axvline(mean_gangguan, color='blue', linestyle='--', label=f'Rata-rata Beban: {mean_gangguan:.1f} Kasus')
-
-                ax3.set_title('Volume Tiket Masuk per Wilayah STO', fontsize=14, fontweight='bold')
-                ax3.set_xlabel('Jumlah Gangguan (Tiket)')
-                ax3.set_ylabel('Wilayah STO')
-                ax3.legend(loc='lower right')
-                ax3.grid(axis='x', linestyle='--', alpha=0.5)
-                ax3.xaxis.set_major_locator(MaxNLocator(integer=True))
-                st.pyplot(fig3)
-
-            with col_t3:
-                st.warning("⚠️ **Tingkat Urgensi Distribusi Wilayah:**")
-                sto_tertinggi = sto_counts.iloc[0]['STO']
-                kasus_tertinggi = sto_counts.iloc[0]['Jumlah_Gangguan']
-                st.write(f"Wilayah sentral **{sto_tertinggi}** teridentifikasi memiliki beban komplain tertinggi yaitu sebanyak **{kasus_tertinggi} kasus**. Penambahan alokasi *standby teknisi* di area ini sangat diperlukan.")
-                st.dataframe(sto_counts)
-        else:
-            st.warning("Data atau kolom 'STO' tidak ditemukan.")
-
+                
+            # 5. Dekorasi Banner Info Text di Setiap Sudut Kuadran
+            ax3.text(xlim[1] - 0.2, ylim[1] - 0.4, "KUADRAN I: PRIORITAS UTAMA\n(Gangguan Banyak & Lambat)", color='#D62828', fontsize=9, weight='bold', ha='right', bbox=dict(boxstyle="square,pad=0.4", fc="#FFEAEA", ec="none", alpha=0.7))
+            ax3.text(xlim[0] + 0.2, ylim[1] - 0.4, "KUADRAN II: SLOW BUT LOW\n(Gangguan Sedikit tapi Lambat)", color='#E65F2B', fontsize=9, weight='bold', ha='left', bbox=dict(boxstyle="square,pad=0.4", fc="#FFF2EA", ec="none", alpha=0.7))
+            ax3.text(xlim[1] - 0.2, ylim[0] + 0.3, "KUADRAN IV: FAST & HIGH\n(Gangguan Banyak tapi Cepat)", color='#1D3557', fontsize=9, weight='bold', ha='right', bbox=dict(boxstyle="square,pad=0.4", fc="#EAF2FF", ec="none", alpha=0.7))
+            ax3.text(xlim[0] + 0.2, ylim[0] + 0.3, "KUADRAN III: AMAN\n(Gangguan Sedikit & Cepat)", color='#2A9D8F', fontsize=9, weight='bold', ha='left', bbox=dict(boxstyle="square,pad=0.4", fc="#E9F7F5", ec="none", alpha=0.7))
+            
+            # Polishing Judul & Label Sumbu
+            ax3.set_title('MATRIKS PRIORITAS PERFORMANSI WILAYAH STO\nTelkom Akses Pekanbaru', fontsize=13, pad=20, weight='bold', color='#1D3557')
+            ax3.set_xlabel('Volume Gangguan (Jumlah Tiket Masuk)', fontsize=11, labelpad=10, weight='semibold')
+            ax3.set_ylabel('Rata-rata Waktu Perbaikan / TTR (Jam)', fontsize=11, labelpad=10, weight='semibold')
+            ax3.grid(True, linestyle=':', alpha=0.5, color='#CCCCCC')
+            sns.despine(left=True, bottom=True)
+            
+            st.pyplot(fig3)
+            
+        with col_t3:
+            st.warning("⚠️ **Analisis Strategis & Urgensi STO:**")
+            
+            # Menemukan STO yang masuk Kuadran Kritis (I)
+            sto_kritis = sto_analysis[(sto_analysis['Jumlah_Gangguan'] >= mid_x) & (sto_analysis['Rata_TTR'] >= mid_y)]['STO'].tolist()
+            
+            if sto_kritis:
+                kritis_str = ", ".join(sto_kritis)
+                st.write(f"Wilayah STO **{kritis_str}** teridentifikasi masuk ke **KUADRAN I (Prioritas Utama)** karena memiliki jumlah gangguan di atas rata-rata sekaligus durasi perbaikan yang lambat.")
+                st.markdown("💡 **Rekomendasi Operasional:**")
+                st.write("- Lakukan audit logistik/material di wilayah tersebut.")
+                st.write("- Tambah alokasi teknisi standby khusus penanganan B2B.")
+            else:
+                st.write("Kabar baik! Tidak ada wilayah STO yang masuk ke dalam Kuadran I (Kritis) untuk kombinasi filter saat ini.")
+                
+            st.write("---")
+            st.markdown("**Data Resume Per Wilayah STO:**")
+            st.dataframe(
+                sto_analysis.sort_values('Jumlah_Gangguan', ascending=False)
+                .style.format({'Rata_TTR': '{:.2f} Jam'})
+            )
+    else:
+        st.warning("Data atau kolom 'STO' tidak ditemukan.")
     # ------------------------------------------------------------------------------
     # TAB 4: ADVANCED AI INSIGHTS & PRODUKTIVITAS TEKNISI (Pertanyaan 4 + Integrasi Data)
     # ------------------------------------------------------------------------------
