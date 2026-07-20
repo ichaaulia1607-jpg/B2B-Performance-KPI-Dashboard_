@@ -218,7 +218,7 @@ if data_loaded:
         else:
             st.warning("Data waktu tidak mencukupi untuk memetakan tren bulanan.")
 # ------------------------------------------------------------------------------
-# TAB 3: PERTANYAAN 3 (Matriks Kuadran Prioritas Wilayah STO - WITH MONTH & Q)
+# TAB 3: PERTANYAAN 3 (Matriks Kuadran Prioritas Wilayah STO - WITH MONTH)
 # ------------------------------------------------------------------------------
 with tab3:
     st.subheader("📍 Peta Urgensi & Evaluasi Performansi Wilayah STO")
@@ -228,17 +228,15 @@ with tab3:
         import seaborn as sns
         import numpy as np
         
-        # 1. Feature Engineering: Hitung durasi TTR & Ekstrak Waktu (Bulan & Quarter)
+        # 1. Feature Engineering: Hitung durasi TTR & Ekstrak Nama Bulan
         df_filtered['Waktu_Open'] = pd.to_datetime(df_filtered['Waktu_Open'])
         df_filtered['Waktu_Closed'] = pd.to_datetime(df_filtered['Waktu_Closed'])
         df_filtered['Durasi_TTR_Jam'] = (df_filtered['Waktu_Closed'] - df_filtered['Waktu_Open']) / pd.Timedelta(hours=1)
         
-        # Tambah kolom Quarter (Q1-Q4) dan Nama Bulan versi Indonesia
-        df_filtered['Quarter'] = 'Q' + df_filtered['Waktu_Open'].dt.quarter.astype(str)
-        
+        # Mapping nama bulan ke Bahasa Indonesia
         bulan_indo = {
             1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
-            7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Otober', 11: 'November', 12: 'Desember'
+            7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'
         }
         df_filtered['Bulan'] = df_filtered['Waktu_Open'].dt.month.map(bulan_indo)
         
@@ -254,7 +252,7 @@ with tab3:
         col_g3, col_t3 = st.columns([2, 1])
         
         with col_g3:
-            # Setup Kanvas Visual Kreatif
+            # Setup Kanvas Visual
             sns.set_theme(style="white")
             fig3, ax3 = plt.subplots(figsize=(10, 7))
             
@@ -318,19 +316,22 @@ with tab3:
                 st.write("Tidak ada wilayah STO yang masuk ke Kuadran Kritis pada filter ini.")
                 
             st.write("---")
-            st.markdown("**📅 Data Resume Berdasarkan Waktu & STO:**")
+            st.markdown("**📅 Data Resume Per Bulan & STO:**")
             
-            # --- BAGIAN PEMBARUAN TABEL RESUME (Groupby ditambahkan Quarter & Bulan) ---
-            tabel_resume = df_filtered.groupby(['Quarter', 'Bulan', 'STO']).agg(
+            # --- SEKARANG HANYA DI-GROUPBY BERDASARKAN BULAN & STO ---
+            tabel_resume = df_filtered.groupby(['Bulan', 'STO']).agg(
                 Jumlah_Gangguan=('No_Tiket', 'count'),
                 Rata_TTR=('Durasi_TTR_Jam', 'mean')
             ).reset_index()
             
-            # Urutkan dari Quarter terbaru dan Jumlah Gangguan terbanyak
-            tabel_resume = tabel_resume.sort_values(by=['Quarter', 'Jumlah_Gangguan'], ascending=[True, False])
+            # Agar urutan bulannya tidak berantakan (alfabetis), kita sort berdasarkan index bulan asli
+            month_order = list(bulan_indo.values())
+            tabel_resume['Bulan'] = pd.Categorical(tabel_resume['Bulan'], categories=month_order, ordered=True)
+            tabel_resume = tabel_resume.sort_values(by=['Bulan', 'Jumlah_Gangguan'], ascending=[True, False])
             
             st.dataframe(
-                tabel_resume.style.format({'Rata_TTR': '{:.2f} Jam'})
+                tabel_resume.style.format({'Rata_TTR': '{:.2f} Jam'}),
+                use_container_width=True
             )
     else:
         st.warning("Data atau kolom 'STO' tidak ditemukan.")
